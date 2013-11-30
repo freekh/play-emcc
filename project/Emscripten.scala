@@ -30,7 +30,11 @@ object EmscriptenSettings {
   import EmscriptenKeys._
 
   val settings = Seq(
-    eccFiles <<= (sourceDirectory in Compile) map ( _   ** "*.cpp" )
+    eccFiles <<= (sourceDirectory in Compile) map ( _   ** "*.cpp" ),
+    resourceGenerators in Compile <+= (eccFiles, playAssetsDirectories) map { (files, outputDirs) =>
+       println(files.get)
+       Seq.empty[File]
+    }
   )
 }
 
