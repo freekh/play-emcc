@@ -1,0 +1,50 @@
+import sbt._
+import sbt.Keys._
+import java.io.File
+import play.Keys._
+import play.PlayExceptions._
+import play.PlaySourceGenerators
+
+object EmscriptenKeys {
+  val eccFiles = taskKey[PathFinder]("C/C++ files to be compiled")
+  val eccCompiler = settingKey[String]("Path to Emscripten compiler")
+}
+
+object EmscriptenSettings {
+  import EmscriptenKeys._
+  
+  val settings = Seq(
+    eccCompiler := "emcc",
+    eccFiles <<= (sourceDirectory in Compile) map ( _   ** "*.cpp" ),
+    resourceGenerators in Compile <+= (eccFiles, eccCompiler, resourceManaged, state) map { (files, eccCompilerString, resourceManaged, state) =>
+      val emscriptenCompiler = new EmscriptenCompiler(eccCompilerString)
+      val results = files.get.flatMap{ f =>
+        val name = f.getName.replaceAll("""\..*?$""", "")
+        val outputDir = resourceManaged / "main" / "public" / name
+
+        //delete current files:
+        IO.delete( (outputDir ** (name + ".*")).get)
+
+        //compile:
+        emscriptenCompiler.compile(f, outputDir) match {
+          case Some(EmscriptenCompilerException(filename, lineNo, colNo, msg)) =>
+            throw PlaySourceGenerators.reportCompilationError(state,
+              AssetCompilationException(Some(file(filename)), msg, lineNo, colNo))
+          case _ =>
+        }
+
+        val outputFiles = (outputDir ** (name + ".*")).get
+        outputFiles
+      }
+      results
+    }
+  )
+}
+
+
+object EmscriptenPlugin extends Plugin {
+  import EmscriptenKeys._
+
+  override lazy val projectSettings: Seq[Setting[_]] = EmscriptenSettings.settings
+
+}
